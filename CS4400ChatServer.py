@@ -1,6 +1,7 @@
 from socket import *
 import time
 import threading
+import sys
 
 running = True
 studentID = 13330793
@@ -13,14 +14,14 @@ connToJoinID = {}  # keys are conn, values are the associated client Join_ID ( C
 joinIDCount = 0  # counter for Join_ID assignment ( CLIENT NUMBERING )
 
 serverName = 'localhost'
-serverPort = 14000
+serverPort = int(sys.argv[1])
+print('Server Port {}'.format(sys.argv[1]))
 print('Creating socket...')
 serverSocket = socket(AF_INET, SOCK_STREAM)
 print('Binding Socket...')
 serverSocket.bind(('', serverPort))  # Bind to the port serverPort on localhost
 print('Attempting to listen for connections...')
 serverSocket.listen(10) # LISTEN FOR UP TO 10 CONNECTIONs
-print('Server Setup Complete')
 
 # Code to find local IP address without returning 127.0.0.1
 print('Detecting Local IP...')
@@ -28,7 +29,7 @@ findIPSocket = socket(AF_INET, SOCK_DGRAM)
 findIPSocket.connect(("8.8.8.8", 80))
 localAddressIP = findIPSocket.getsockname()[0]
 findIPSocket.close()
-
+print('Local IP found as {}\nServer Setup Complete'.format(localAddressIP))
 
 # HELO function
 def heloFunction(inputMessage, conn):
