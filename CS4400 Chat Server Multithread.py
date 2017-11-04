@@ -4,7 +4,15 @@ import threading
 
 running = True
 studentID = 13330793
-# threading.Thread(target=loop1_10).start()
+
+
+roomMutex = threading.Lock()
+roomNameToRef = {}  # Dictionary with room names as keys, and room refs as values 
+               # Each room will be a list of connections to the clients in that room 
+roomRefToConn = {}  # Dictionary which takes room ref and returns list of connections
+roomRefCount = 0  # Value used to assign a unique room reference to each room
+connToJoinID = {}  # keys are conn, values are the associated client Join_ID
+joinIDCount = 0  # counter for Join_ID assignment
 
 serverName = 'localhost'
 serverPort = 14000
@@ -12,12 +20,6 @@ serverSocket = socket(AF_INET, SOCK_STREAM)
 serverSocket.bind(('', serverPort))  # Bind to the port serverPort on localhost
 serverSocket.listen(10) # LISTEN FOR UP TO 10 CONNECTIONs
 print('Server Setup Complete')
-
-# # For UDP
-# socketUDP = socket(AF_INET, SOCK_DGRAM)  # UDP uses datagrams, not a stream
-# socketUDP.bind(('',serverPort))
-# # UDP doesn't need to establish a back and forth connection to verify message integrity,
-# # hence why there is no listen method used
 
 # HELO function
 def heloFunction(inputMessage, conn):
@@ -31,17 +33,47 @@ def heloFunction(inputMessage, conn):
 # Join chatroom function
 def joinChatroom(inputMessage, conn):
     # INCLUDE CODE TO JOIN A CHATROOM (ADD TO A CHATROOM LIST VIA MUTEX)
-    join_text_split = inputMessage.splitlines()  # splits message by newlines
-    join_room_name = join_text_split[0][15:]  # First line with "JOIN_CHATROOM: " cut off
-    join_client_ip = join_text_split[1][11:]  # Second line with "CLIENT_IP: " cut off
-    join_port = join_text_split[2][6:]  # Third line with "PORT: " cut off
-    join_client_name = join_text_split[0][13:]  # Fourth line with "CLIENT_NAME: " cut off
+    text_split = inputMessage.splitlines()  # splits message by newlines
+    room_name = text_split[0][15:]  # First line with "JOIN_CHATROOM: " cut off
+    client_ip = text_split[1][11:]  # Second line with "CLIENT_IP: " cut off
+    port = text_split[2][6:]  # Third line with "PORT: " cut off
+    client_name = text_split[3][13:]  # Fourth line with "CLIENT_NAME: " cut off
+    
+    # Global keyword needed to use the variables created outside this function
+    global roomMutex
+    global roomNameToRef
+    global roomRefToConn
+    global roomRefCount
+    global connToJoinID
+    global joinIDCount    
 
-    room_number = 0  # replace with correct room numbering system
-    client_number = 0  # replace with correct client numbering system
-    join_text_response = "JOINED_CHATROOM: {}\nSERVER_IP: {}\nPORT: {}\nROOM_REF: {}\nJOIN_ID: {}\n".format(join_room_name, gethostbyname(getfqdn()), join_port, room_number, client_number)
-    print(join_text_response.encode())
-    conn.send(join_text_response.encode())
+    # Joining the chatroom and creating one if there isn't one
+    roomMutex.acquire()
+    if room_name not in roomNameToRef:  # Check if the room already exists
+                                        # If not then assign a Room_Ref number to the room name
+        roomRefCount += 1  # Increment room reference counter
+        roomNameToRef[room_name] = roomRefCount  # associate the room name with a room reference
+        roomRefToConn[roomRefCount] =  list()  # create a list for connections for that room_ref
+    currentRoomRef = roomNameToRef[room_name]  # Get room ref from room name
+    roomRefToConn[currentRoomRef].append(conn)  # Add connection to list
+                                              # Access the connection list by room_ref through roomRefToConn dictionary
+    # Check if already in room before adding conn??
+    roomMutex.release()
+    
+    if conn not in connToJoinID:  # If the current client isn't in the client list
+        joinIDCount += 1
+        connToJoinID[conn] = joinIDCount  # Give the client a joinID to be referenced by its conn 
+    client_joinID = connToJoinID[conn]
+
+    text_response = "JOINED_CHATROOM: {}\nSERVER_IP: {}\nPORT: {}\nROOM_REF: {}\nJOIN_ID: {}\n".format(room_name, gethostbyname(getfqdn()), port, currentRoomRef, client_joinID)
+    print(text_response.encode())
+    conn.send(text_response.encode())
+
+    room_response = "CHAT: {}\nCLIENT_NAME: {}\nMESSAGE: {} has joined this chatroom\n\n".format(currentRoomRef, client_name, client_name)
+
+    # Send message to all clients in room that a new client has joined
+    for connect in roomRefToConn[currentRoomRef]:
+        connect.send(room_response.encode())
 
 
 
