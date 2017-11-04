@@ -7,11 +7,11 @@ studentID = 13330793
 
 
 roomMutex = threading.Lock()
-roomNameToRef = {}  # Dictionary with room names as keys, and room refs as values 
+roomNameToRef = {}  # Dictionary with room names as keys, and room refs as values ( ROOM IDENTIFICATION BY NAME )
                # Each room will be a list of connections to the clients in that room 
-roomRefToConn = {}  # Dictionary which takes room ref and returns list of connections
+roomRefToConn = {}  # Dictionary which takes room ref and returns list of connections ( STORES CONNECTIONS OF ROOM ROOM_REF )
 roomRefCount = 0  # Value used to assign a unique room reference to each room
-connToJoinID = {}  # keys are conn, values are the associated client Join_ID
+connToJoinID = {}  # keys are conn, values are the associated client Join_ID ( CLIENT IDENTIFICATION BY CONNECTION )
 joinIDCount = 0  # counter for Join_ID assignment
 
 serverName = 'localhost'
@@ -76,7 +76,32 @@ def joinChatroom(inputMessage, conn):
         connect.send(room_response.encode())
 
 
+def leaveChatroom(inputMessage, conn):
+    # INCLUDE CODE TO JOIN A CHATROOM (ADD TO A CHATROOM LIST VIA MUTEX)
+    text_split = inputMessage.splitlines()  # splits message by newlines
+    room_ref = text_split[0][16:]  # First line with "LEAVE_CHATROOM: " cut off
+    join_ID = text_split[1][9:]  # Second line with "JOIN_ID: " cut off
+    client_name = text_split[2][13:]  # Fourth line with "CLIENT_NAME: " cut off
+    
+    global roomMutex
+    global roomRefToConn
+    global connToJoinID
+    global joinIDCount  
 
+    if conn in roomRefToConn[int(room_ref)]:  # Removes connection from room list
+        roomRefToConn[int(room_ref)].remove(conn)
+    leave_response = "LEFT_CHATROOM: {}\nJOIN_ID: {}\n".format(room_ref, join_ID)
+    conn.send(leave_response.encode())  # Tell client that they have left
+
+    room_response = "CHAT: {}\nCLIENT_NAME: {}\nMESSAGE: {} has left this chatroom\n\n".format(room_ref, client_name, client_name)
+
+    # Send message to all clients in room that a new client has joined
+    for connect in roomRefToConn[int(room_ref)]:
+        connect.send(room_response.encode())
+
+    
+
+#  This function decides what to do with the contents received from the client connection
 def receive_clients(conn):
     # TELNET SENDS MESSAGES WITH '\r\n' AT THE END. CHANGE TO '\n' FOR FINAL IMPLEMENTATION
     while 1:
@@ -95,6 +120,9 @@ def receive_clients(conn):
 
         elif receivedMessage[:13] == "JOIN_CHATROOM":
             joinChatroom(receivedMessage, conn)
+
+        elif receivedMessage[:14] == "LEAVE_CHATROOM":
+            leaveChatroom(receivedMessage, conn)
 
         elif receivedMessage == "KILL_SERVICE\n":  # When telnet leaves, it sends blank data. Replace with end message
             break
