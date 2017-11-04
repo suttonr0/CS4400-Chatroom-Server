@@ -93,15 +93,29 @@ def leaveChatroom(inputMessage, conn):
     leave_response = "LEFT_CHATROOM: {}\nJOIN_ID: {}\n".format(room_ref, join_ID)
     conn.send(leave_response.encode())  # Tell client that they have left
 
-    room_response = "CHAT: {}\nCLIENT_NAME: {}\nMESSAGE: {} has left this chatroom\n\n".format(room_ref, client_name, client_name)
+    room_response = "CHAT: {}\nCLIENT_NAME: {}\nMESSAGE: {} has left this chatroom\n\n".format(room_ref, client_name, client_name)  # Message saying that the client has left
 
     conn.send(room_response.encode())  # Send message to client who has just left the room
 
-    # Send message to all clients in room that a new client has joined
+    # Send message to all clients in room that the client has left
     for connect in roomRefToConn[int(room_ref)]:
         connect.send(room_response.encode())
 
+
+def chatToChatroom(inputMessage, conn):
+    # INCLUDE CODE TO JOIN A CHATROOM (ADD TO A CHATROOM LIST VIA MUTEX)
+    text_split = inputMessage.splitlines()  # splits message by newlines
+    room_ref = text_split[0][6:]  # First line with "CHAT: " cut off
+    join_ID = text_split[1][9:]  # Second line with "JOIN_ID: " cut off
+    client_name = text_split[2][13:]  # Third line with "CLIENT_NAME: " cut off
+    chatMessage = text_split[3][9:]  # Fourth line with "MESSAGE: " cut off
     
+    room_response = "CHAT: {}\nCLIENT_NAME: {}\nMESSAGE: {}\n\n".format(room_ref, client_name, chatMessage)
+
+    # Send message to all clients in room
+    for connect in roomRefToConn[int(room_ref)]:
+        connect.send(room_response.encode())
+
 
 #  This function decides what to do with the contents received from the client connection
 def receive_clients(conn):
@@ -116,7 +130,6 @@ def receive_clients(conn):
         print("------------")
 
 	# HANDLING INPUT
-	
         if receivedMessage[:4] == "HELO":  # Check if first 4 chars are HELO
             heloFunction(receivedMessage, conn)
 
@@ -125,6 +138,9 @@ def receive_clients(conn):
 
         elif receivedMessage[:14] == "LEAVE_CHATROOM":
             leaveChatroom(receivedMessage, conn)
+
+        elif receivedMessage[:4] == "CHAT":
+            chatToChatroom(receivedMessage, conn)
 
         elif receivedMessage == "KILL_SERVICE\n":  # When telnet leaves, it sends blank data. Replace with end message
             break
