@@ -9,7 +9,7 @@ studentID = 13330793
 roomMutex = threading.Lock()
 roomNameToRef = {}  # Dictionary with room names as keys, and room refs as values ( ROOM IDENTIFICATION BY NAME )
                # Each room will be a list of connections to the clients in that room 
-roomRefToConn = {}  # Dictionary which takes room ref and returns list of connections ( STORES CONNECTIONS OF ROOM ROOM_REF )
+roomRefToConn = {}  # Dictionary which takes room ref and returns list of connections for that room ( STORES CONNECTIONS OF ROOM ROOM_REF )
 roomRefCount = 0  # Value used to assign a unique room reference to each room
 connToJoinID = {}  # keys are conn, values are the associated client Join_ID ( CLIENT IDENTIFICATION BY CONNECTION )
 joinIDCount = 0  # counter for Join_ID assignment
@@ -57,6 +57,7 @@ def joinChatroom(inputMessage, conn):
     currentRoomRef = roomNameToRef[room_name]  # Get room ref from room name
     roomRefToConn[currentRoomRef].append(conn)  # Add connection to list
                                               # Access the connection list by room_ref through roomRefToConn dictionary
+    
     # Check if already in room before adding conn??
     roomMutex.release()
     
@@ -110,11 +111,29 @@ def chatToChatroom(inputMessage, conn):
     client_name = text_split[2][13:]  # Third line with "CLIENT_NAME: " cut off
     chatMessage = text_split[3][9:]  # Fourth line with "MESSAGE: " cut off
     
+    global roomRefToConn
     room_response = "CHAT: {}\nCLIENT_NAME: {}\nMESSAGE: {}\n\n".format(room_ref, client_name, chatMessage)
-
     # Send message to all clients in room
     for connect in roomRefToConn[int(room_ref)]:
         connect.send(room_response.encode())
+    
+
+def disconnectClient(inputMessage, conn):
+    # INCLUDE CODE TO JOIN A CHATROOM (ADD TO A CHATROOM LIST VIA MUTEX)
+    text_split = inputMessage.splitlines()  # splits message by newlines
+    client_IP = text_split[0][12:]  # First line with "DISCONNECT: " cut off
+    port = text_split[1][6:]  # Second line with "PORT: " cut off
+    client_name = text_split[2][13:]  # Third line with "CLIENT_NAME: " cut off
+    
+    global roomRefToConn   
+    for roomReference in roomRefToConn:  # check all rooms for connections with disconnecting client
+        if conn in roomRefToConn[roomReference]:  # If the connection of the client to be disconnected is found
+            room_response = "CHAT: {}\nCLIENT_NAME: {}\nMESSAGE: {} has left this chatroom\n\n".format(roomReference, client_name, client_name)
+            # Send message to all clients in room
+            for connect in roomRefToConn[int(roomReference)]:
+                connect.send(room_response.encode())
+            roomRefToConn[int(roomReference)].remove(conn)   # Removes connection from room list
+    conn.close()  # close the connection    
 
 
 #  This function decides what to do with the contents received from the client connection
@@ -122,12 +141,13 @@ def receive_clients(conn):
     # TELNET SENDS MESSAGES WITH '\r\n' AT THE END. CHANGE TO '\n' FOR FINAL IMPLEMENTATION
     while 1:
         receivedMessage = conn.recv(1024)  # Read data from socket
-        print("Byte String:")
-        print(receivedMessage)  # incoming data is of byte type? (b'Text')
-        print("------------")
         receivedMessage = receivedMessage.decode()  # decode from byte type to string type
-        print(receivedMessage)
-        print("------------")
+        if receivedMessage != "":
+            print("Byte String:")
+            print(receivedMessage)  # incoming data is of byte type? (b'Text')
+            print("------------")
+            print(receivedMessage)
+            print("------------")
 
 	# HANDLING INPUT
         if receivedMessage[:4] == "HELO":  # Check if first 4 chars are HELO
@@ -141,6 +161,9 @@ def receive_clients(conn):
 
         elif receivedMessage[:4] == "CHAT":
             chatToChatroom(receivedMessage, conn)
+        
+        elif receivedMessage[:10] == "DISCONNECT":
+            disconnectClient(receivedMessage, conn)
 
         elif receivedMessage == "KILL_SERVICE\n":  # When telnet leaves, it sends blank data. Replace with end message
             break
