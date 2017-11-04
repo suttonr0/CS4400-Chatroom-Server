@@ -5,35 +5,38 @@ import threading
 running = True
 studentID = 13330793
 
-
-roomMutex = threading.Lock()
-roomNameToRef = {}  # Dictionary with room names as keys, and room refs as values ( ROOM IDENTIFICATION BY NAME )
-               # Each room will be a list of connections to the clients in that room 
-roomRefToConn = {}  # Dictionary which takes room ref and returns list of connections for that room ( STORES CONNECTIONS OF ROOM ROOM_REF )
+roomMutex = threading.Lock()  # Mutex lock to control room lists
+roomNameToRef = {}  # Dictionary with room names as keys, and ROOM_REFs as values ( ROOM IDENTIFICATION BY NAME )
+roomRefToConn = {}  # Dictionary which takes room ref and returns list of connections for that room ( STORES CONNECTIONS FOR THE ROOM GIVEN BY ROOM_REF )
 roomRefCount = 0  # Value used to assign a unique room reference to each room
 connToJoinID = {}  # keys are conn, values are the associated client Join_ID ( CLIENT IDENTIFICATION BY CONNECTION )
-joinIDCount = 0  # counter for Join_ID assignment
+joinIDCount = 0  # counter for Join_ID assignment ( CLIENT NUMBERING )
 
 serverName = 'localhost'
 serverPort = 14000
+print('Creating socket...')
 serverSocket = socket(AF_INET, SOCK_STREAM)
+print('Binding Socket...')
 serverSocket.bind(('', serverPort))  # Bind to the port serverPort on localhost
+print('Attempting to listen for connections...')
 serverSocket.listen(10) # LISTEN FOR UP TO 10 CONNECTIONs
 print('Server Setup Complete')
+
+# Code to find local IP address without returning 127.0.0.1
+print('Detecting Local IP...')
+findIPSocket = socket(AF_INET, SOCK_DGRAM)
+findIPSocket.connect(("8.8.8.8", 80))
+localAddressIP = findIPSocket.getsockname()[0]
+findIPSocket.close()
+
 
 # HELO function
 def heloFunction(inputMessage, conn):
     print("Received HELO")
-    
-    # Code to find IP socket
-    findIPSocket = socket(AF_INET, SOCK_DGRAM)
-    findIPSocket.connect(("8.8.8.8", 80))
-    localAddressIP = findIPSocket.getsockname()[0]
-    findIPSocket.close()
-    #  localAddressIP = gethostbyname(getfqdn())  # RETURNS INCORRECT IP ADDRESS FOR EXTERNAL USE
+    global localAddressIP
     helo_reply = "HELO{}IP:{}\nPort:{}\nStudentID:{}\n".format(inputMessage[4:],localAddressIP,serverPort,studentID)     
     conn.send(helo_reply.encode())
-    print("Sent Reply {}".format(helo_reply))
+    print("> Sent Reply:\n {}".format(helo_reply))
 
 
 # Join chatroom function
@@ -52,11 +55,11 @@ def joinChatroom(inputMessage, conn):
     global roomRefCount
     global connToJoinID
     global joinIDCount    
+    global localAddressIP
 
     # Joining the chatroom and creating one if there isn't one
     roomMutex.acquire()
-    if room_name not in roomNameToRef:  # Check if the room already exists
-                                        # If not then assign a Room_Ref number to the room name
+    if room_name not in roomNameToRef:  # If room doesn't exist, assign a Room_Ref number to the room name
         roomRefCount += 1  # Increment room reference counter
         roomNameToRef[room_name] = roomRefCount  # associate the room name with a room reference
         roomRefToConn[roomRefCount] =  list()  # create a list for connections for that room_ref
@@ -72,8 +75,8 @@ def joinChatroom(inputMessage, conn):
         connToJoinID[conn] = joinIDCount  # Give the client a joinID to be referenced by its conn 
     client_joinID = connToJoinID[conn]
 
-    text_response = "JOINED_CHATROOM: {}\nSERVER_IP: {}\nPORT: {}\nROOM_REF: {}\nJOIN_ID: {}\n".format(room_name, gethostbyname(getfqdn()), port, currentRoomRef, client_joinID)
-    print(text_response.encode())
+    text_response = "JOINED_CHATROOM: {}\nSERVER_IP: {}\nPORT: {}\nROOM_REF: {}\nJOIN_ID: {}\n".format(room_name, localAddressIP, port, currentRoomRef, client_joinID)
+    print("> Sent Reply:\n {}".format(text_response))
     conn.send(text_response.encode())
 
     room_response = "CHAT: {}\nCLIENT_NAME: {}\nMESSAGE: {} has joined this chatroom\n\n".format(currentRoomRef, client_name, client_name)
@@ -81,6 +84,7 @@ def joinChatroom(inputMessage, conn):
     # Send message to all clients in room that a new client has joined
     for connect in roomRefToConn[currentRoomRef]:
         connect.send(room_response.encode())
+    print("> Sent to room {}:\n {}".format(currentRoomRef, room_response))
 
 
 def leaveChatroom(inputMessage, conn):
@@ -98,15 +102,17 @@ def leaveChatroom(inputMessage, conn):
     if conn in roomRefToConn[int(room_ref)]:  # Removes connection from room list
         roomRefToConn[int(room_ref)].remove(conn)
     leave_response = "LEFT_CHATROOM: {}\nJOIN_ID: {}\n".format(room_ref, join_ID)
+    print("> Sent Reply:\n {}".format(leave_response))
     conn.send(leave_response.encode())  # Tell client that they have left
 
     room_response = "CHAT: {}\nCLIENT_NAME: {}\nMESSAGE: {} has left this chatroom\n\n".format(room_ref, client_name, client_name)  # Message saying that the client has left
 
     conn.send(room_response.encode())  # Send message to client who has just left the room
-
+    
     # Send message to all clients in room that the client has left
     for connect in roomRefToConn[int(room_ref)]:
         connect.send(room_response.encode())
+    print("> Sent to room {}:\n {}".format(room_ref, room_response))
 
 
 def chatToChatroom(inputMessage, conn):
@@ -122,6 +128,7 @@ def chatToChatroom(inputMessage, conn):
     # Send message to all clients in room
     for connect in roomRefToConn[int(room_ref)]:
         connect.send(room_response.encode())
+    print("> Sent to room {}:\n {}".format(room_ref, room_response))
     
 
 def disconnectClient(inputMessage, conn):
@@ -138,6 +145,7 @@ def disconnectClient(inputMessage, conn):
             # Send message to all clients in room
             for connect in roomRefToConn[int(roomReference)]:
                 connect.send(room_response.encode())
+            print("> Sent to room {}:\n {}".format(roomReference, room_response))
             roomRefToConn[int(roomReference)].remove(conn)   # Removes connection from room list
     conn.close()  # close the connection    
 
@@ -145,15 +153,16 @@ def disconnectClient(inputMessage, conn):
 #  This function decides what to do with the contents received from the client connection
 def receive_clients(conn):
     # TELNET SENDS MESSAGES WITH '\r\n' AT THE END. CHANGE TO '\n' FOR FINAL IMPLEMENTATION
+    global running
+ 
     while 1:
         receivedMessage = conn.recv(1024)  # Read data from socket
         receivedMessage = receivedMessage.decode()  # decode from byte type to string type
         if receivedMessage != "":
-            print("Byte String:")
-            print(receivedMessage)  # incoming data is of byte type? (b'Text')
-            print("------------")
-            print(receivedMessage)
-            print("------------")
+            print("-------- Received Message --------")
+            print(receivedMessage)  
+            print("--------- End of Message ---------")
+            print("")
 
 	# HANDLING INPUT
         if receivedMessage[:4] == "HELO":  # Check if first 4 chars are HELO
@@ -170,20 +179,26 @@ def receive_clients(conn):
         
         elif receivedMessage[:10] == "DISCONNECT":
             disconnectClient(receivedMessage, conn)
-
-        elif receivedMessage == "KILL_SERVICE\n":  # When telnet leaves, it sends blank data. Replace with end message
             break
-        #else:
-        #    print("INVALID INPUT DETECTED")
-            
-    print("Ended connection")
-    conn.close()  # Close the socket
+
+        elif receivedMessage == "KILL_SERVICE\n":  # When telnet leaves, it sends blank data. Replace with end message               
+            print("Ended connection")
+            running = False
+            conn.close()  # Close the socket
+            break
+
+        elif receivedMessage == "":
+            pass  # do nothing
+
+        else:
+            print("--------------\nInvalid server command:\n{}\n--------------\n".format(receivedMessage))
+
 
 
 while running:
-    connectionSocket, addr = serverSocket.accept()
-    print('Received Connection')
-    threading.Thread(target=receive_clients, args=(connectionSocket,)).start()
+    connectionSocket, addr = serverSocket.accept()  # accepting connections
+    print('Received Connection from {}'.format(addr))
+    threading.Thread(target=receive_clients, args=(connectionSocket,)).start()  # start receive_clients() for that connection
 
     
 
