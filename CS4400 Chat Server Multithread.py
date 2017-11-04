@@ -24,7 +24,13 @@ print('Server Setup Complete')
 # HELO function
 def heloFunction(inputMessage, conn):
     print("Received HELO")
-    localAddressIP = gethostbyname(getfqdn())  # RETURNS INCORRECT IP ADDRESS FOR EXTERNAL USE
+    
+    # Code to find IP socket
+    findIPSocket = socket(AF_INET, SOCK_DGRAM)
+    findIPSocket.connect(("8.8.8.8", 80))
+    localAddressIP = findIPSocket.getsockname()[0]
+    findIPSocket.close()
+    #  localAddressIP = gethostbyname(getfqdn())  # RETURNS INCORRECT IP ADDRESS FOR EXTERNAL USE
     helo_reply = "HELO{}IP:{}\nPort:{}\nStudentID:{}\n".format(inputMessage[4:],localAddressIP,serverPort,studentID)     
     conn.send(helo_reply.encode())
     print("Sent Reply {}".format(helo_reply))
