@@ -95,6 +95,8 @@ def leaveChatroom(inputMessage, conn):
 
     room_response = "CHAT: {}\nCLIENT_NAME: {}\nMESSAGE: {} has left this chatroom\n\n".format(room_ref, client_name, client_name)
 
+    conn.send(room_response.encode())  # Send message to client who has just left the room
+
     # Send message to all clients in room that a new client has joined
     for connect in roomRefToConn[int(room_ref)]:
         connect.send(room_response.encode())
